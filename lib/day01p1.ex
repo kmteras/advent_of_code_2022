@@ -1,0 +1,17 @@
+defmodule Day01P1 do
+
+  def solve(filename) do
+    File.read!(filename)
+    |> String.trim()
+    |> String.split("\n\n")
+    |> Enum.map(&sum/1)
+    |> Enum.max()
+  end
+
+  defp sum(list) do
+    list
+    |> String.split("\n")
+    |> Enum.map(&String.to_integer/1)
+    |> Enum.sum()
+  end
+end

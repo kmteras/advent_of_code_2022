@@ -31,84 +31,74 @@ defmodule Day12P2 do
         for {key, value} <- Map.to_list(grid) do
           <<v::utf8>> = value
 
-          v =
-            if key == end_position do
-              122
-            else
-              if key == start_position do
-                97
-              else
-                v
-              end
-            end
+          v = cond do
+            key == end_position -> 122
+            key == start_position -> 97
+            true -> v
+          end
 
           {key, v}
         end
       )
 
+    costs = traverse(grid, end_position, %{
+      end_position => %{d: 0, parent: nil}
+    })
+
     candidates =
       Map.to_list(grid)
-      # TODO: Remove hardcoded start x
-      |> Enum.filter(fn {{x, y}, height} -> height == 97 && x == 0 end)
+      |> Enum.filter(fn {{x, y}, height} -> height == 97 end)
       |> Enum.map(&elem(&1, 0))
-      |> Enum.map(fn start ->
-        IO.inspect(start)
-        traverse(grid, start, end_position, %{
-          start => %{d: 0, parent: nil}
-        })
-      end)
+      |> Enum.map(&Map.get(costs, &1, %{d: 100000000}).d)
       |> Enum.min()
   end
 
-  defp traverse(grid, nil, end_pos, costs, visited) do
-    1000000000000000000000
+  defp traverse(grid, nil, costs, visited) do
+    costs
   end
 
-  defp traverse(grid, {nx, ny} = position, {ex, ey} = end_pos, costs, visited \\ MapSet.new()) do
-    if position == end_pos do
-      find_path(costs, position, 0)
-    else
-      new_positions =
-        for {dx, dy} <- [{1, 0}, {-1, 0}, {0, 1}, {0, -1}], reduce: [] do
-          next_list ->
-            new_pos = {nx + dx, ny + dy}
-            move_height = Map.get(grid, new_pos)
-            current_height = Map.get(grid, position)
+  defp traverse(grid, {nx, ny} = position, costs, visited \\ MapSet.new()) do
+    current_height = Map.get(grid, position)
 
-            if move_height && move_height - current_height <= 1 do
-              [new_pos] ++ next_list
-            else
-              next_list
-            end
-        end
+    new_positions =
+      for {dx, dy} <- [{1, 0}, {-1, 0}, {0, 1}, {0, -1}], reduce: [] do
+        next_list ->
+          new_pos = {nx + dx, ny + dy}
+          move_height = Map.get(grid, new_pos)
 
-      costs =
-        for {x, y} = pos <- new_positions, reduce: costs do
-          costs ->
-            n = Map.get(costs, position, %{d: 1000000000000000})
-
-            if n.d + 1 < Map.get(costs, pos, %{d: 1000000000000000}).d do
-              c = %{d: n.d + 1, parent: position}
-
-              Map.put(costs, pos, c)
-            else
-              costs
-            end
-        end
-
-      visited = MapSet.put(visited, position)
-
-      {min_pos, _} = for {key, %{d: d}} <- Map.to_list(costs), reduce: {nil, 10000000000000} do
-        {pos, distance} ->
-          if not MapSet.member?(visited, key) && d < distance do
-            {key, d}
+          if move_height && move_height - current_height >= -1 do
+            [new_pos] ++ next_list
           else
-            {pos, distance}
+            next_list
           end
       end
 
-      traverse(grid, min_pos, end_pos, costs, visited)
+    n = Map.get(costs, position, %{d: 1000000000000000})
+
+    costs =
+      for {x, y} = pos <- new_positions, reduce: costs do
+        costs ->
+          if n.d + 1 < Map.get(costs, pos, %{d: 1000000000000000}).d do
+            c = %{d: n.d + 1, parent: position}
+
+            Map.put(costs, pos, c)
+          else
+            costs
+          end
+      end
+
+    visited = MapSet.put(visited, position)
+
+    {min_pos, _} = for {key, %{d: d}} <- Map.to_list(costs), reduce: {nil, 10000000000000} do
+      {pos, distance} ->
+        if not MapSet.member?(visited, key) && d < distance do
+          {key, d}
+        else
+          {pos, distance}
+        end
     end
+
+    traverse(grid, min_pos, costs, visited)
   end
 
   defp find_path(costs, node, steps) do

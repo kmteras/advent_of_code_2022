@@ -54,13 +54,14 @@ defmodule Day19P1 do
          day,
          cache
        ) do
-    cache = if cache do
-      cache
-    else
-      :ets.new(:memory, [:set, :public])
-    end
+    cache =
+      if cache do
+        cache
+      else
+        :ets.new(:memory, [:set, :public])
+      end
 
-    cached_value = :ets.lookup(cache, {costs, robots, resources, day})
+    cached_value = :ets.lookup(cache, {robots, resources, day})
 
     if cached_value != [] do
       [{_, cache}] = cached_value
@@ -69,74 +70,25 @@ defmodule Day19P1 do
       # List of new robots combinations
       new_robots_combination = MapSet.new()
 
-      new_robots_combination =
-        if (ore >= geode_ore || ore == :inf) && obs >= geode_obs do
-          new_resources =
-            if ore == :inf do
-              [:inf, clay, obs - geode_obs, geode]
-            else
-              [ore - geode_ore, clay, obs - geode_obs, geode]
-            end
+      new_robots_combination = buy_robot(new_robots_combination, robots, resources, [geode_ore, 0, geode_obs], 3)
 
-          MapSet.put(
-            new_robots_combination,
-            {robots, List.update_at(robots, 3, &(&1 + 1)), new_resources}
-          )
-        else
-          new_robots_combination
-        end
+      new_robots_combination = if obs_r < geode_obs do
+        buy_robot(new_robots_combination, robots, resources, [obs_ore, obs_clay, 0], 2)
+      else
+        new_robots_combination
+      end
 
-      new_robots_combination =
-        if (ore >= obs_ore || ore == :inf) && clay >= obs_clay && obs_r < geode_obs do
-          new_resources =
-            if ore == :inf do
-              [:inf, clay - obs_clay, obs, geode]
-            else
-              [ore - obs_ore, clay - obs_clay, obs, geode]
-            end
+      new_robots_combination = if clay_r < obs_clay do
+        buy_robot(new_robots_combination, robots, resources, [clay_ore, 0, 0], 1)
+      else
+        new_robots_combination
+      end
 
-          MapSet.put(
-            new_robots_combination,
-            {robots, List.update_at(robots, 2, &(&1 + 1)), new_resources}
-          )
-        else
-          new_robots_combination
-        end
-
-      new_robots_combination =
-        if (ore >= clay_ore || ore == :inf) && clay_r < obs_clay do
-          new_resources =
-            if ore == :inf do
-              [:inf, clay, obs, geode]
-            else
-              [ore - clay_ore, clay, obs, geode]
-            end
-
-          MapSet.put(
-            new_robots_combination,
-            {robots, List.update_at(robots, 1, &(&1 + 1)), new_resources}
-          )
-        else
-          new_robots_combination
-        end
-
-      new_robots_combination =
-        if (ore >= ore_ore || ore == :inf) &&
-             (clay_ore > ore_r || obs_ore > ore_r || geode_ore > ore_r) do
-          new_resources =
-            if ore == :inf do
-              [:inf, clay, obs, geode]
-            else
-              [ore - ore_ore, clay, obs, geode]
-            end
-
-          MapSet.put(
-            new_robots_combination,
-            {robots, List.update_at(robots, 0, &(&1 + 1)), new_resources}
-          )
-        else
-          new_robots_combination
-        end
+      new_robots_combination = if ore_r < max_ore_cost(costs) do
+        buy_robot(new_robots_combination, robots, resources, [ore_ore, 0, 0], 0)
+      else
+        new_robots_combination
+      end
 
       new_robots_combination =
         if MapSet.size(new_robots_combination) == 0 || ore_ore > ore_r do
@@ -145,16 +97,16 @@ defmodule Day19P1 do
           new_robots_combination
         end
 
-      new_moves = MapSet.new()
-
       new_moves =
-        for {robots, new_robots, resources} <- new_robots_combination, reduce: new_moves do
+        for {robots, new_robots, resources} <- new_robots_combination, reduce: MapSet.new() do
           new_moves ->
             new_resources =
               for {resource, index} <- Enum.with_index(resources) do
                 cond do
                   resource == :inf -> :inf
                   index == 0 && Enum.at(robots, index) >= max_ore_cost(costs) -> :inf
+                  index == 1 && Enum.at(robots, index) >= obs_clay -> :inf
+                  index == 2 && Enum.at(robots, index) >= geode_obs -> :inf
                   true -> resource + Enum.at(robots, index)
                 end
               end
@@ -167,9 +119,42 @@ defmodule Day19P1 do
           geodes -> max(geodes, geodes(costs, new_robots, new_resources, day + 1, cache))
         end
 
-      :ets.insert(cache, {{costs, robots, resources, day}, geodes})
+      :ets.insert(cache, {{robots, resources, day}, geodes})
+
+      if day == 0 do
+        :ets.delete(cache)
+      end
 
       geodes
+    end
+  end
+
+  defp buy_robot(
+         comb,
+         [ore_r, clay_r, obs_r, geode_r] = robots,
+         [ore, clay, obs, geode] = resources,
+         [req_ore, req_clay, req_obs],
+         robot_index
+       ) do
+      if (ore >= req_ore || ore == :inf) && (clay >= req_clay || clay == :inf) && (obs >= req_obs || obs == :inf) do
+        ore = use_res(req_ore, ore)
+        clay = use_res(req_clay, clay)
+        obs = use_res(req_obs, obs)
+
+        MapSet.put(
+          comb,
+          {robots, List.update_at(robots, robot_index, &(&1 + 1)), [ore, clay, obs, geode]}
+        )
+      else
+        comb
+      end
+  end
+
+  defp use_res(req_res, res) do
+    if res == :inf do
+      :inf
+    else
+      res - req_res
     end
   end
 

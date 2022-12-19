@@ -102,11 +102,15 @@ defmodule Day19P1 do
           new_moves ->
             new_resources =
               for {resource, index} <- Enum.with_index(resources) do
+                enough_obs = Enum.at(robots, 2) >= geode_obs
+                enough_clay = Enum.at(robots, 1) >= obs_clay || enough_obs
+                enough_ore = Enum.at(robots, 0) >= max_ore_cost(costs) || enough_clay
+
                 cond do
                   resource == :inf -> :inf
-                  index == 0 && Enum.at(robots, index) >= max_ore_cost(costs) -> :inf
-                  index == 1 && Enum.at(robots, index) >= obs_clay -> :inf
-                  index == 2 && Enum.at(robots, index) >= geode_obs -> :inf
+                  index == 0 && enough_ore -> :inf
+                  index == 1 && enough_clay -> :inf
+                  index == 2 && enough_obs -> :inf
                   true -> resource + Enum.at(robots, index)
                 end
               end
@@ -122,6 +126,7 @@ defmodule Day19P1 do
       :ets.insert(cache, {{robots, resources, day}, geodes})
 
       if day == 0 do
+        IO.inspect(:ets.info(cache))
         :ets.delete(cache)
       end
 

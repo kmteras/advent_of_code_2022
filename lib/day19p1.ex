@@ -20,30 +20,30 @@ defmodule Day19P1 do
   import MapSet, only: [put: 2, member?: 2]
 
   def solve(filename) do
-    Agent.start_link(fn -> %{} end, name: __MODULE__)
+    options = [
+      :set,
+      :public,
+      :named_table
+    ]
+
+    :ets.new(:memory, options)
 
     data =
       read!(filename)
       |> trim()
       |> String.split("\n")
       |> Enum.map(&parse_line/1)
-
-    # [0, 1, 0, 2, 2, 0, 5, 7, 2, 1, 1, 16, 9, 1, 0, 2, 6, 4, 5, 0, 0, 0, 11, 0, 1, 0, 0, 0, 1, 0]
-
-    stream = Task.async_stream(data, &geodes/1, timeout: :infinity)
-
-    stream
-    |> Enum.to_list()
-    |> Enum.map(fn {:ok, geodes} -> geodes end)
-    |> IO.inspect(charlists: :as_lists)
-    |> Enum.with_index(1)
-    |> Enum.map(fn {v, i} -> v * i end)
-    |> Enum.sum()
+      |> Task.async_stream(&geodes/1, timeout: :infinity)
+      |> Enum.map(fn {:ok, geodes} -> geodes end)
+      |> IO.inspect(charlists: :as_lists)
+      |> Enum.with_index(1)
+      |> Enum.map(fn {v, i} -> v * i end)
+      |> Enum.sum()
   end
 
-  defp geodes(cost, robots \\ [1, 0, 0, 0], resources \\ [0, 0, 0, 0], day \\ 0)
+  defp geodes(cost, robots \\ [1, 0, 0, 0], resources \\ [0, 0, 0, 0], day \\ 0, cache \\ nil)
 
-  defp geodes(_, _, resources, 24) do
+  defp geodes(_, _, resources, 24, _) do
     Enum.at(resources, 3)
   end
 
@@ -51,57 +51,96 @@ defmodule Day19P1 do
          [ore_ore, clay_ore, {obs_ore, obs_clay}, {geode_ore, geode_obs}] = costs,
          [ore_r, clay_r, obs_r, geode_r] = robots,
          [ore, clay, obs, geode] = resources,
-         day
+         day,
+         cache
        ) do
-    cached_value = Agent.get(__MODULE__, &Map.get(&1, {costs, robots, resources, day}))
+    cache = if cache do
+      cache
+    else
+      :ets.new(:memory, [:set, :public])
+    end
 
-    if cached_value do
-      cached_value
+    cached_value = :ets.lookup(cache, {costs, robots, resources, day})
+
+    if cached_value != [] do
+      [{_, cache}] = cached_value
+      cache
     else
       # List of new robots combinations
-      new_robots_combination = MapSet.new([{robots, robots, resources}])
-
-      #      IO.inspect({day, robots, resources})
+      new_robots_combination = MapSet.new()
 
       new_robots_combination =
-        if ore >= geode_ore && obs >= geode_obs do
+        if (ore >= geode_ore || ore == :inf) && obs >= geode_obs do
+          new_resources =
+            if ore == :inf do
+              [:inf, clay, obs - geode_obs, geode]
+            else
+              [ore - geode_ore, clay, obs - geode_obs, geode]
+            end
+
           MapSet.put(
             new_robots_combination,
-            {robots, List.update_at(robots, 3, &(&1 + 1)),
-             [ore - geode_ore, clay, obs - geode_obs, geode]}
+            {robots, List.update_at(robots, 3, &(&1 + 1)), new_resources}
           )
         else
           new_robots_combination
         end
 
       new_robots_combination =
-        if ore >= obs_ore && clay >= obs_clay && obs_r < geode_obs do
+        if (ore >= obs_ore || ore == :inf) && clay >= obs_clay && obs_r < geode_obs do
+          new_resources =
+            if ore == :inf do
+              [:inf, clay - obs_clay, obs, geode]
+            else
+              [ore - obs_ore, clay - obs_clay, obs, geode]
+            end
+
           MapSet.put(
             new_robots_combination,
-            {robots, List.update_at(robots, 2, &(&1 + 1)),
-             [ore - obs_ore, clay - obs_clay, obs, geode]}
+            {robots, List.update_at(robots, 2, &(&1 + 1)), new_resources}
           )
         else
           new_robots_combination
         end
 
       new_robots_combination =
-        if ore >= clay_ore && clay_r < obs_clay do
+        if (ore >= clay_ore || ore == :inf) && clay_r < obs_clay do
+          new_resources =
+            if ore == :inf do
+              [:inf, clay, obs, geode]
+            else
+              [ore - clay_ore, clay, obs, geode]
+            end
+
           MapSet.put(
             new_robots_combination,
-            {robots, List.update_at(robots, 1, &(&1 + 1)), [ore - clay_ore, clay, obs, geode]}
+            {robots, List.update_at(robots, 1, &(&1 + 1)), new_resources}
           )
         else
           new_robots_combination
         end
 
       new_robots_combination =
-        if ore >= ore_ore &&
+        if (ore >= ore_ore || ore == :inf) &&
              (clay_ore > ore_r || obs_ore > ore_r || geode_ore > ore_r) do
+          new_resources =
+            if ore == :inf do
+              [:inf, clay, obs, geode]
+            else
+              [ore - ore_ore, clay, obs, geode]
+            end
+
           MapSet.put(
             new_robots_combination,
-            {robots, List.update_at(robots, 0, &(&1 + 1)), [ore - ore_ore, clay, obs, geode]}
+            {robots, List.update_at(robots, 0, &(&1 + 1)), new_resources}
           )
+        else
+          new_robots_combination
+        end
+
+      new_robots_combination =
+        if MapSet.size(new_robots_combination) == 0 || ore_ore > ore_r do
+          MapSet.put(new_robots_combination, {robots, robots, resources})
         else
           new_robots_combination
         end
@@ -113,7 +152,11 @@ defmodule Day19P1 do
           new_moves ->
             new_resources =
               for {resource, index} <- Enum.with_index(resources) do
-                resource + Enum.at(robots, index)
+                cond do
+                  resource == :inf -> :inf
+                  index == 0 && Enum.at(robots, index) >= max_ore_cost(costs) -> :inf
+                  true -> resource + Enum.at(robots, index)
+                end
               end
 
             MapSet.put(new_moves, {costs, new_robots, new_resources})
@@ -121,13 +164,17 @@ defmodule Day19P1 do
 
       geodes =
         for {costs, new_robots, new_resources} <- new_moves, reduce: 0 do
-          geodes -> max(geodes, geodes(costs, new_robots, new_resources, day + 1))
+          geodes -> max(geodes, geodes(costs, new_robots, new_resources, day + 1, cache))
         end
 
-      Agent.update(__MODULE__, &Map.put(&1, {costs, robots, resources, day}, geodes))
+      :ets.insert(cache, {{costs, robots, resources, day}, geodes})
 
       geodes
     end
+  end
+
+  defp max_ore_cost([ore_ore, clay_ore, {obs_ore, _}, {geode_ore, _}]) do
+    Enum.max([ore_ore, clay_ore, obs_ore, geode_ore])
   end
 
   defp parse_line(line) do

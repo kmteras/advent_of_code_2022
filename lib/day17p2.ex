@@ -47,13 +47,16 @@ defmodule Day17P2 do
     floor_height = floor_height(grid)
 
     # Dont start checking until one cycle has passed to collect historic data and another has passed to collect milestones
-    if i / Enum.count(data) > 2 && rem(rocks, 5) == 0 && {0, 0} == shift && Enum.count(milestones) > 0 do
+    if i / Enum.count(data) > 3 && rem(rocks, 5) == 0 && {0, 0} == shift && Enum.count(milestones) > 0 do
       case is_pattern(grid, data, milestones) do
         {true, match_rocks, match_height} ->
           rocks_pattern = rocks - match_rocks
           height_pattern = floor_height - match_height
 
           [{last_rocks, last_height} | milestones] = milestones
+
+          last_rocks = rocks
+          last_height = floor_height
 
           rocks_left = 1000000000000 - last_rocks
           skip_height = floor(rocks_left / rocks_pattern) * height_pattern

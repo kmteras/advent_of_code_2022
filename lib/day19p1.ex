@@ -41,7 +41,9 @@ defmodule Day19P1 do
       |> Enum.sum()
   end
 
-  defp geodes(cost, robots \\ [1, 0, 0, 0], resources \\ [0, 0, 0, 0], day \\ 0, cache \\ nil)
+  defp geodes(cost, robots \\ [1, 0, 0], resources \\ [0, 0, 0, 0], day \\ 0, cache \\ nil)
+
+  @up_to_day 24
 
   defp geodes(_, _, resources, 24, _) do
     Enum.at(resources, 3)
@@ -49,7 +51,7 @@ defmodule Day19P1 do
 
   defp geodes(
          [ore_ore, clay_ore, {obs_ore, obs_clay}, {geode_ore, geode_obs}] = costs,
-         [ore_r, clay_r, obs_r, geode_r] = robots,
+         [ore_r, clay_r, obs_r] = robots,
          [ore, clay, obs, geode] = resources,
          day,
          cache
@@ -70,22 +72,22 @@ defmodule Day19P1 do
       # List of new robots combinations
       new_robots_combination = MapSet.new()
 
-      new_robots_combination = buy_robot(new_robots_combination, robots, resources, [geode_ore, 0, geode_obs], 3)
+      new_robots_combination = buy_robot(new_robots_combination, robots, resources, [geode_ore, 0, geode_obs], 3, day)
 
       new_robots_combination = if obs_r < geode_obs do
-        buy_robot(new_robots_combination, robots, resources, [obs_ore, obs_clay, 0], 2)
+        buy_robot(new_robots_combination, robots, resources, [obs_ore, obs_clay, 0], 2, day)
       else
         new_robots_combination
       end
 
       new_robots_combination = if clay_r < obs_clay do
-        buy_robot(new_robots_combination, robots, resources, [clay_ore, 0, 0], 1)
+        buy_robot(new_robots_combination, robots, resources, [clay_ore, 0, 0], 1, day)
       else
         new_robots_combination
       end
 
       new_robots_combination = if ore_r < max_ore_cost(costs) do
-        buy_robot(new_robots_combination, robots, resources, [ore_ore, 0, 0], 0)
+        buy_robot(new_robots_combination, robots, resources, [ore_ore, 0, 0], 0, day)
       else
         new_robots_combination
       end
@@ -111,6 +113,7 @@ defmodule Day19P1 do
                   index == 0 && enough_ore -> :inf
                   index == 1 && enough_clay -> :inf
                   index == 2 && enough_obs -> :inf
+                  index == 3 -> resource
                   true -> resource + Enum.at(robots, index)
                 end
               end
@@ -136,20 +139,25 @@ defmodule Day19P1 do
 
   defp buy_robot(
          comb,
-         [ore_r, clay_r, obs_r, geode_r] = robots,
+         [ore_r, clay_r, obs_r] = robots,
          [ore, clay, obs, geode] = resources,
          [req_ore, req_clay, req_obs],
-         robot_index
+         robot_index,
+         day
        ) do
       if (ore >= req_ore || ore == :inf) && (clay >= req_clay || clay == :inf) && (obs >= req_obs || obs == :inf) do
         ore = use_res(req_ore, ore)
         clay = use_res(req_clay, clay)
         obs = use_res(req_obs, obs)
 
-        MapSet.put(
-          comb,
-          {robots, List.update_at(robots, robot_index, &(&1 + 1)), [ore, clay, obs, geode]}
-        )
+        if robot_index == 3 do
+          MapSet.put(comb, {robots, robots, [ore, clay, obs, geode + @up_to_day - day - 1]})
+        else
+          MapSet.put(
+            comb,
+            {robots, List.update_at(robots, robot_index, &(&1 + 1)), [ore, clay, obs, geode]}
+          )
+        end
       else
         comb
       end
